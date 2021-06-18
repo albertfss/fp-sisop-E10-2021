@@ -16,7 +16,8 @@ const int SIZE_BUFFER = sizeof(char) * DATA_BUFFER;
 char inputPath[DATA_BUFFER];
 bool _inputPath = false;
 bool root = false;
-char user[DATA_BUFFER] = {};
+char user[DATA_BUFFER] = {0};
+char use[DATA_BUFFER] = {0};
 
 int create_tcp_client_socket();
 void *handleInput(void *client_fd);
@@ -48,11 +49,11 @@ int main(int argc, char** argv)
     }
     send(client_fd, message, DATA_BUFFER, 0);
 
-    pthread_create(&(tid[0]), NULL, &handleOutput, (void *) &client_fd);
     pthread_create(&(tid[1]), NULL, &handleInput, (void *) &client_fd);
+    pthread_create(&(tid[0]), NULL, &handleOutput, (void *) &client_fd);
 
-    pthread_join(tid[0], NULL);
     pthread_join(tid[1], NULL);
+    pthread_join(tid[0], NULL);
 
     close(client_fd);
     return 0;
@@ -93,14 +94,24 @@ void *handleInput(void *client_fd)
 
     while (1) {
         char message[DATA_BUFFER] = {0};
+        sleep(1);
         getStr(message);
-        // printf("%s", message);
+        // printf("%s\n\n", message);
+        if(use[0] != '\0') {
+            if(strstr(message, user) == NULL) {
+                char tmp[DATA_BUFFER] = {0};
+                strcpy(tmp, use);
+                strcat(tmp, "/-");
+                strcat(tmp, message);
+                strcpy(message, tmp);
+            } 
+        }
         if (!root) {
-            if(strstr(message, " CREATE USER ") != NULL) {
+            if(strstr(message, ":CREATE USER ") != NULL) {
                 printf("Access denied!\n%s# ", user);
                 continue;
             }
-            else if(strstr(message, " GRANT PERMISSION ") != NULL) {
+            else if(strstr(message, ":GRANT PERMISSION ") != NULL) {
                 printf("Access denied!\n%s# ", user);
                 continue;
             } else {
@@ -130,6 +141,23 @@ void *handleOutput(void *client_fd)
         if(strcmp("Wrong Username or Password\n", message) == 0) {
             // close(fd);
         }
+        if(strstr(message, "USING:") != NULL) {
+            char temp[DATA_BUFFER] = {0};
+            strcpy(temp, message);
+            char *token = strtok(temp, ":");
+            token = strtok(NULL,":");
+            if(token != NULL) {
+                memset(use, 0, SIZE_BUFFER);
+                char tmp[DATA_BUFFER];
+                strcpy(tmp,token);
+                int i=0;
+                while(tmp[i] != '\n') {
+                    use[i] = tmp[i];
+                    i++;
+                }
+            }
+
+        }
         fflush(stdout);
     }
 }
@@ -144,29 +172,42 @@ void getServerInput(int fd, char *input)
 
 void getStr(char *message) {
     char bufferInput = '0';
+    memset(message, 0, SIZE_BUFFER);
     int i=0;
-    for(i; i<strlen(user); i++) {
-        message[i] = user[i];
+    if(use[0] == '\0') {
+        for(i; i<strlen(user); i++) {
+            message[i] = user[i];
+        }
+        message[i] = ':';
+        i++;
+    } else {
+        strcpy(message, use);
+        strcat(message, "/-");
+        strcat(message, user);
+        strcat(message, ":");
     }
-    message[i] = ':';
-    i++;
-
+    i = 0;
+    char message2[DATA_BUFFER] = {0};
     while(bufferInput != ';') {
         bufferInput = getchar();
         if(bufferInput == '\n') {
             bufferInput = ' ';
         }
-        message[i++] = bufferInput;
+        message2[i++] = bufferInput;
         int temp = i-1;
-        if(message[temp] == ' ' && message[temp-1] == ' ') {
+        if(message2[temp] == ' ' && message2[temp-1] == ' ') {
             i--;
         }
-        if(message[temp] == ';' && message[temp-1] == ' ') {
+        if(message2[temp] == ';' && message2[temp-1] == ' ') {
             i--;
         }
-        if(message[temp] == ' ' && message[temp-1] == ':') {
+        if(message2[temp] == ' ' && temp-1 < 0) {
+            i--;
+        }
+        if(message2[temp] == ' ' && message2[temp-1] == '(') {
             i--;
         }
     }
-    message[i-1] = '\0';
+    message2[i-1] = '\0';
+    strcat(message, message2);
 }
